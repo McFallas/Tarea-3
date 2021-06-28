@@ -1,0 +1,342 @@
+---
+title: "Tarea 3"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Preparativos
+
+```{r bibliotecas, include=FALSE, message=FALSE}
+library(sf)
+library(raster)
+library(dplyr)
+library(spData)
+library(leaflet)
+library(plotly)
+library(DT)
+```
+
+```{r data, echo=TRUE, message=FALSE, warning=FALSE, quiet=TRUE}
+primates <-
+  st_read(
+    "https://raw.githubusercontent.com/gf0604-procesamientodatosgeograficos/2021i-datos/main/gbif/primates-cr-registros.csv",
+    options = c(
+      "X_POSSIBLE_NAMES=decimalLongitude",
+      "Y_POSSIBLE_NAMES=decimalLatitude"
+    ),
+    quiet = TRUE
+  )
+
+st_crs(primates) = 4326
+
+
+cantones <-
+  st_read(
+    "https://raw.githubusercontent.com/gf0604-procesamientodatosgeograficos/2021i-datos/main/ign/delimitacion-territorial-administrativa/cr_cantones_simp_wgs84.geojson",
+    quiet = TRUE
+  )
+provincias <-
+  st_read(
+    "https://raw.githubusercontent.com/gf0604-procesamientodatosgeograficos/2021i-datos/main/ign/delimitacion-territorial-administrativa/cr_provincias_simp_wgs84.geojson",
+    quiet = TRUE
+  )
+```
+
+```{r cruce-data, message=FALSE,echo=TRUE}
+primates <-
+  primates %>%
+  st_join(cantones["canton"])
+```
+# Introducción  
+
+Se van a trabajar las estadísiticas de cuatro especies de primates en Costa Rica y a su vez se mapearan los diferentes registros que se poseen.
+```{r tabla-registros, message=FALSE}
+primates %>%
+  st_drop_geometry() %>%
+  dplyr::select(family, species, stateProvince, locality, eventDate) %>%
+  datatable(
+    colnames = c("Familia", "Especies", "Provincia", "Localidad", "Fecha"),
+    options = list(
+      searchHighlight = TRUE,
+      language = list(url = '//cdn.datatables.net/plug-ins/1.10.11/i18n/Spanish.json')
+    )
+  )
+```
+
+```{r procentajes, message=FALSE,echo=TRUE, include=FALSE}
+sum(with(primates, species == "Ateles geoffroyi"))
+sum(with(primates, species == "Cebus capucinus"))
+sum(with(primates, species == "Alouatta palliata"))
+sum(with(primates, species == "Saimiri oerstedii"))
+
+cantidades <- c(599, 1463, 1994, 453)
+etiquetas <-
+  c("Mono Araña", "Mono Carablanca", "Mono Aullador", "Mono Ardilla")
+```
+
+```{r gráfico-registros, message=FALSE,echo=TRUE}
+primates %>%
+  plot_ly(
+    labels = ~ etiquetas,
+    values = ~ cantidades,
+    type = "pie",
+    textposition = "inside",
+    textinfo = "label+percent"
+  ) %>%
+  config(locale = "es") %>%
+  layout(
+    title = "Especies de primates",
+    xaxis = list(
+      showgrid = FALSE,
+      zeroline = FALSE,
+      showticklabels = FALSE
+    ),
+    yaxis = list(
+      showgrid = FALSE,
+      zeroline = FALSE,
+      showticklabels = FALSE
+    )
+  )
+```
+
+```{r filter, message=FALSE,echo=TRUE}
+Araña <- primates %>%
+  dplyr::select(species,
+                stateProvince,
+                locality,
+                eventDate,
+                decimalLatitude,
+                decimalLongitude) %>%
+  filter(species == 'Ateles geoffroyi')
+
+Carablanca <- primates %>%
+  dplyr::select(species,
+                stateProvince,
+                locality,
+                eventDate,
+                decimalLatitude,
+                decimalLongitude) %>%
+  filter(species == 'Cebus capucinus')
+
+Aullador <- primates %>%
+  dplyr::select(species,
+                stateProvince,
+                locality,
+                eventDate,
+                decimalLatitude,
+                decimalLongitude) %>%
+  filter(species == 'Alouatta palliata')
+
+Ardilla <- primates %>%
+  dplyr::select(species,
+                stateProvince,
+                locality,
+                eventDate,
+                decimalLatitude,
+                decimalLongitude) %>%
+  filter(species == 'Saimiri oerstedii')
+```
+
+```{r altitud, message=FALSE,echo=TRUE}
+alt <- getData(
+  "worldclim",
+  var = "alt",
+  res = .5,
+  lon = -84,
+  lat = 10
+)
+altitud <-
+  alt %>%
+  crop(provincias) %>%
+  mask(provincias)
+```
+
+```{r colors, message=FALSE,echo=TRUE}
+rcol <- colorNumeric(c("#9933FF", "#99FF33", "#FF3300"),
+                     values(altitud),
+                     na.color = "transparent")
+```
+
+```{r popup, message=FALSE,echo=TRUE}
+geoffroyi <- paste0(
+  "<b>",
+  "Especie del primate: ",
+  "</b>",
+  (Araña$species),
+  "<br>",
+  "<b>",
+  "Provincia: ",
+  "</b>",
+  (Araña$stateProvince),
+  "<br>",
+  "<b>",
+  "CantÃ³n: ",
+  "</b>",
+  (Araña$locality),
+  "<br>",
+  "<b>",
+  "Fecha: ",
+  "</b>",
+  (Araña$eventDate),
+  "<br>",
+  "<b>",
+  "Cordenadas: " ,
+  "</b>",
+  (Araña$decimalLongitude),
+  "<br>",
+  (Araña$decimalLatitude)
+)
+oerstedii <- paste0(
+  "<b>",
+  "Especie del primate: ",
+  "</b>",
+  (Ardilla$species),
+  "<br>",
+  "<b>",
+  "Provincia: ",
+  "</b>",
+  (Ardilla$stateProvince),
+  "<br>",
+  "<b>",
+  "CantÃ³n: ",
+  "</b>",
+  (Ardilla$locality),
+  "<br>",
+  "<b>",
+  "Fecha: ",
+  "</b>",
+  (Ardilla$eventDate),
+  "<br>",
+  "<b>",
+  "Cordenadas: " ,
+  "</b>",
+  (Ardilla$decimalLongitude),
+  "<br>",
+  (Ardilla$decimalLatitude)
+)
+palliata <- paste0(
+  "<b>",
+  "Especie del primate: ",
+  "</b>",
+  (Aullador$species),
+  "<br>",
+  "<b>",
+  "Provincia: ",
+  "</b>",
+  (Aullador$stateProvince),
+  "<br>",
+  "<b>",
+  "CantÃ³n: ",
+  "</b>",
+  (Aullador$locality),
+  "<br>",
+  "<b>",
+  "Fecha: ",
+  "</b>",
+  (Aullador$eventDate),
+  "<br>",
+  "<b>",
+  "Cordenadas: " ,
+  "</b>",
+  (Aullador$decimalLongitude),
+  "<br>",
+  (Aullador$decimalLatitude)
+)
+capucinus <- paste0(
+  "<b>",
+  "Especie del primate: ",
+  "</b>",
+  (Carablanca$species),
+  "<br>",
+  "<b>",
+  "Provincia: ",
+  "</b>",
+  (Carablanca$stateProvince),
+  "<br>",
+  "<b>",
+  "CantÃ³n: ",
+  "</b>",
+  (Carablanca$locality),
+  "<br>",
+  "<b>",
+  "Fecha: ",
+  "</b>",
+  (Carablanca$eventDate),
+  "<br>",
+  "<b>",
+  "Cordenadas: " ,
+  "</b>",
+  (Carablanca$decimalLongitude),
+  "<br>",
+  (Carablanca$decimalLatitude)
+)
+```
+
+```{r mapa, echo=TRUE, message=FALSE, warning=FALSE}
+primates %>%
+  leaflet() %>%
+  addProviderTiles(providers$OpenStreetMap.Mapnik, group = "OpenStreetMap") %>%
+  addProviderTiles(providers$Stamen.TonerLite, group = "Stamen Toner Lite") %>%
+  addProviderTiles(providers$Esri.WorldImagery, group = "Imágenes de ESRI") %>%
+  addRasterImage(altitud,
+                 colors = rcol,
+                 opacity = 0.8,
+                 group = "Altitud") %>%
+  addCircleMarkers(
+    data = Araña,
+    stroke = F,
+    radius = 4,
+    fillColor = '#CC0033',
+    fillOpacity = 1,
+    popup = geoffroyi,
+    group = "Ateles geoffroyi"
+  ) %>%
+  addCircleMarkers(
+    data = Ardilla,
+    stroke = F,
+    radius = 4,
+    fillColor = '#FF3399',
+    fillOpacity = 1,
+    popup = oerstedii,
+    group = "Saimiri oerstedii"
+  ) %>%
+  addCircleMarkers(
+    data = Aullador,
+    stroke = F,
+    radius = 4,
+    fillColor = '#33FF66',
+    fillOpacity = 1,
+    popup = palliata,
+    group = "Alouatta palliata"
+  ) %>%
+  addCircleMarkers(
+    data = Carablanca,
+    stroke = F,
+    radius = 4,
+    fillColor = '#33FFFF',
+    fillOpacity = 1,
+    popup = capucinus,
+    group = "Cebus capucinus"
+  ) %>%
+  addLayersControl(
+    baseGroups = c("OpenStreetMap", "Stamen Toner Lite", "Imágenes de ESRI"),
+    overlayGroups = c(
+      "Ateles geoffroyi",
+      "Cebus capucinus",
+      "Alouatta palliata",
+      "Saimiri oerstedii",
+      "altitud"
+    )
+  ) %>%
+  addMiniMap(
+    tiles = providers$Stamen.OpenStreetMap.Mapnik,
+    position = "bottomleft",
+    toggleDisplay = TRUE
+  )
+```
+
+
+
